@@ -43,7 +43,6 @@ void inter_mode(){
 		parsed_input = parse_input(strsep(&line, END_OF_LINE));
 		execute_command(parsed_input);
 		free(parsed_input);
-		if(n_ch_read < 2) break;	
 	}
 }
 
