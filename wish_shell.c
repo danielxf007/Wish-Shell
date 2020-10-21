@@ -5,14 +5,19 @@
 #include <sys/wait.h>
 #define ERROR_MESSAGE "An error has occurred\n"
 #define TEXT_SEPARATOR " "
+#define TEXT_SEPARATOR_REDIRR ">"
+#define TEXT_SEPARATOR_PARALLEL "&"
 #define END_OF_LINE "\n"
 char **search_path = NULL;
 void inter_mode();
 void bash_mode(char* file_name);
+int get_input_type(char *input);
 void cd(char* path_name);
 void path(char **args);
 void print_2_d_char_arr(char** arr);
-char** parse_input(char* input);
+char **parse_input(char *input, char *separator);
+char ***parse_input_redir(char* input);
+char ***parse_input_parall(char* input);
 char* get_path(char* command);
 void execute_command(char** args);
 int main(int argc, char** argv){
@@ -33,19 +38,32 @@ int main(int argc, char** argv){
 //Sheel modes
 void inter_mode(){
 	int finished = 0;
-	char *line;
+	char *input;
 	size_t len;
 	ssize_t n_ch_read;
-	char** parsed_input;
+	char ***parsed_input_redir;
+	char ***parsed_input_parall;
+	char **parsed_input;
 
 	while(!finished){
-		line = NULL;
+		input = NULL;
 		len = 0;
 		printf ("wish> ");
-		n_ch_read = getline(&line, &len, stdin);
-		parsed_input = parse_input(strsep(&line, END_OF_LINE));
-		execute_command(parsed_input);
-		free(parsed_input);
+		n_ch_read = getline(&input, &len, stdin);
+		int input_type = get_input_type(input);
+		switch(input_type){
+			case 1:
+				parsed_input_redir = parse_input_redir(strsep(&input, END_OF_LINE));
+				free(parsed_input_redir);
+				break;
+			case 2:
+				parsed_input_parall = parse_input_parall(strsep(&input, END_OF_LINE));
+				free(parsed_input_parall);
+				break;
+			default:
+				parsed_input = parse_input(strsep(&input, END_OF_LINE), TEXT_SEPARATOR);
+				free(parsed_input);
+		}
 	}
 }
 
@@ -62,6 +80,15 @@ void bash_mode(char* file_name){
 	while ((n_ch_read = getline(&line, &len, file)) != -1){
 	}
 	exit(0);
+}
+
+// Returns the type of input, 0 for Redirection, 1 for Parallel, 2 for normal
+
+int get_input_type(char *input){
+	int input_type = 0;
+	if(strstr(input, TEXT_SEPARATOR_REDIRR)) input_type = 1;
+	else if(strstr(input, TEXT_SEPARATOR_PARALLEL)) input_type = 2;
+	return input_type;
 }
 
 // Built in Commands
@@ -82,21 +109,57 @@ void path(char **args){
 	search_path[index] = NULL;
 }
 
-// Parser returns [command, other stuff, NULL]
+// Parsers
 
-char** parse_input(char* input){
+// returns [command, other stuff, NULL]
+char **parse_input(char *input, char *separator){
 	char** parsed_input = (char**)calloc(1, sizeof(char*));
 	char* parse_part;
 	int index = 0;
-	while((parse_part = strsep(&input, TEXT_SEPARATOR)) != NULL ){
-		parsed_input[index] = parse_part;
-		index += 1;
-		parsed_input = (char**)realloc(parsed_input, (index+1)*sizeof(char*));
+	while((parse_part = strsep(&input, separator)) != NULL ){
+		if(strlen(parse_part) > 0){
+			parsed_input[index] = parse_part;
+			index += 1;
+			parsed_input = (char**)realloc(parsed_input, (index+1)*sizeof(char*));
+		}
 	}
 	parsed_input[index] = NULL;
 	return parsed_input;
 }
 
+// Returns [[command, other stuff, NULL], [outputfile, NULL]] or  NULL if there a mistakes in the input  
+char ***parse_input_redir(char* input){
+	char ***parsed_input = NULL;
+	char *left_side = strsep(&input, TEXT_SEPARATOR_REDIRR);
+	char *right_side = input;
+	char **parsed_left_side = parse_input(left_side, TEXT_SEPARATOR);
+	if(parsed_left_side[0] == NULL)
+		return parsed_input;
+	char **parsed_right_side = parse_input(right_side, TEXT_SEPARATOR);
+	if(parsed_right_side[0] == NULL || strcmp(parsed_right_side[0], TEXT_SEPARATOR_REDIRR) == 0 || parsed_right_side[1] != NULL)
+		return parsed_input;
+	parsed_input = (char***)malloc(2*sizeof(char**));
+	parsed_input[0] = parsed_left_side;
+	parsed_input[1] = parsed_right_side;
+	return parsed_input;
+}
+
+// Returns [[command0, other stuff0, NULL], ..., [commandn, other stuffn, NULL], NULL]
+char ***parse_input_parall(char* input){
+	char ***parsed_input = (char***)malloc(sizeof(char**));
+	char **parsed_input_apersan = parse_input(input, TEXT_SEPARATOR_PARALLEL);
+	char **parsed_command;
+	int index = 0;
+	for(char **p = parsed_input_apersan; *p; p++){
+		parsed_command = parse_input(*p, TEXT_SEPARATOR);
+		parsed_input[index] = parsed_command;
+		print_2_d_char_arr(parsed_command);
+		index ++;
+		parsed_input = (char***)realloc(parsed_input, (index+1)*sizeof(char**));
+	}
+	parsed_input[index] = NULL;
+	return parsed_input;
+}
 // Useful
 
 void print_2_d_char_arr(char** arr){
@@ -154,8 +217,6 @@ void execute_command(char** args){
 				wait(NULL); // hasta que no se ejecute el hijo no salimos
 			}
 		}else fprintf( stderr,"%s", ERROR_MESSAGE);
-		 
-
 	}
 }
 
