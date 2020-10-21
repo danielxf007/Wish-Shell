@@ -6,11 +6,11 @@
 #define ERROR_MESSAGE "An error has occurred\n"
 #define TEXT_SEPARATOR " "
 #define END_OF_LINE "\n"
-
+char **search_path = NULL;
 void inter_mode();
 void bash_mode(char* file_name);
 void cd(char* path_name);
-void path(char** args);
+void path(char **args);
 void print_2_d_char_arr(char** arr);
 char** parse_input(char* input);
 char* get_path(char* command);
@@ -70,8 +70,16 @@ void cd(char* path_name){
 	if(chdir(path_name) == -1) fprintf( stderr,"%s", ERROR_MESSAGE);
 }
 
-void path(char** args){
-	printf("%s \n", "PATH");
+void path(char **args){
+	search_path = (char**)malloc(sizeof(char*));
+	int index = 0;
+	char **p = args;
+	while(*(p++)){
+		search_path[index] = *p;
+		index++;
+		search_path = (char**)realloc(search_path, (index+1)*sizeof(char*));
+	}
+	search_path[index] = NULL;
 }
 
 // Parser returns [command, other stuff, NULL]
@@ -100,9 +108,9 @@ void print_2_d_char_arr(char** arr){
 // Return 1 if the command can be executed, 0 otherwise
 
 char *get_path(char *command){
-	char *paths[] = { "./", "/usr/bin/", "/bin/", NULL};
-	char *path_name;
-	for(char **p = paths; *p; p++){
+	char *path_name = NULL;
+	if(!search_path) return path_name;
+	for(char **p = search_path; *p; p++){
 		path_name = (char*)malloc((strlen(*p) + strlen(command))*sizeof(char));
 		stpcpy(path_name, *p);
 		strcat(path_name, command);
