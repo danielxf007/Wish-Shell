@@ -2,15 +2,18 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include<string.h>
+#include <sys/wait.h>
 #define ERROR_MESSAGE "An error has occurred\n"
 #define TEXT_SEPARATOR " "
 #define END_OF_LINE "\n"
+
 void inter_mode();
 void bash_mode(char* file_name);
-void cd(char* arg);
+void cd(char* path_name);
 void path(char** args);
 void print_2_d_char_arr(char** arr);
 char** parse_input(char* input);
+char* get_path(char* command);
 void execute_command(char** args);
 int main(int argc, char** argv){
 	
@@ -63,8 +66,8 @@ void bash_mode(char* file_name){
 
 // Built in Commands
 
-void cd(char* arg){
-	printf("%s \n", "CD");
+void cd(char* path_name){
+	if(chdir(path_name) == -1) fprintf( stderr,"%s", ERROR_MESSAGE);
 }
 
 void path(char** args){
@@ -94,6 +97,23 @@ void print_2_d_char_arr(char** arr){
 	}
 }
 
+// Return 1 if the command can be executed, 0 otherwise
+
+char *get_path(char *command){
+	char *paths[] = { "./", "/usr/bin/", "/bin/", NULL};
+	char *path_name;
+	for(char **p = paths; *p; p++){
+		path_name = (char*)malloc((strlen(*p) + strlen(command))*sizeof(char));
+		stpcpy(path_name, *p);
+		strcat(path_name, command);
+		if(access(path_name, X_OK) == 0) break;
+		else {
+			free(path_name);
+			path_name = NULL;
+		}
+	}
+	return path_name;
+}
 //
 
 void execute_command(char** args){
@@ -109,7 +129,25 @@ void execute_command(char** args){
 	}else if(strcmp(args[0], path_custom) == 0){
 		path(args);
 	}else{
-		printf("%s \n", "Other Commands");
+		char *path_name = get_path(args[0]);
+		if(path_name != NULL){
+			int rc = fork();
+			 if (rc < 0) {
+				 // fork failed; exit
+				 fprintf(stderr, "fork failed\n");
+				 exit(1);
+			}else if (rc == 0) {
+				// child (new process)
+				 if(execv(path_name, args) == -1) {
+					 fprintf( stderr,"%s", ERROR_MESSAGE);
+					 exit(1);
+				 }					 
+			}else{
+				wait(NULL); // hasta que no se ejecute el hijo no salimos
+			}
+		}else fprintf( stderr,"%s", ERROR_MESSAGE);
+		 
+
 	}
 }
 
