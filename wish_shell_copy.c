@@ -4,6 +4,7 @@
 #include<string.h>
 #include <sys/wait.h>
 #include "parsers.h"
+#include <fcntl.h>
 #define ERROR_MESSAGE "An error has occurred\n"
 #define END_OF_LINE "\n"
 char **search_path = NULL;
@@ -13,8 +14,9 @@ int get_input_type(char *input);
 void cd(char* path_name);
 void path(char **args);
 char* get_path(char* command);
-void execute_command(char **args, FILE *file, char *format, char *message);
+void execute_command(char **args);
 void execute_command_redir(char **args, char *file_name);
+
 int main(int argc, char** argv){
 	
 	switch(argc-1){
@@ -39,36 +41,39 @@ void inter_mode(){
 	char ***parsed_input_redir;
 	char ***parsed_input_parall;
 	char **parsed_input;
-	char *format = "%s";
 
 	while(!finished){
 		input = NULL;
 		len = 0;
-		printf ("wish> ");
+		printf("wish> ");
 		n_ch_read = getline(&input, &len, stdin);
 		int input_type = get_input_type(input);
 		switch(input_type){
 			case 1:
 				parsed_input_redir = parse_input_redir(strsep(&input, END_OF_LINE));
-				FILE *file;
-				file = freopen(parsed_input_redir[1][0], "w", stdout);
-				if(file == NULL){
-					fprintf(stderr,"%s", ERROR_MESSAGE);
-					exit(1);
-				}
-				execute_command(parsed_input_redir[0], file, format, ERROR_MESSAGE);
-				fclose(file);
-				free(parsed_input_redir);
+				if(parsed_input_redir){
+					int fd = open(parsed_input_redir[1][0], O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+					int std_out = dup(STDOUT_FILENO);
+					int std_err = dup(STDERR_FILENO);
+					dup2(fd, STDOUT_FILENO);
+					dup2(fd, STDERR_FILENO);
+					execute_command(parsed_input_redir[0]);
+					close(fd);
+					dup2(std_out, STDOUT_FILENO);
+					dup2(std_err, STDERR_FILENO);
+					free(parsed_input_redir);					
+				}else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
+
 				break;
 			case 2:
 				parsed_input_parall = parse_input_parall(strsep(&input, END_OF_LINE));
 				for(char ***commands = parsed_input_parall; *commands;  commands++)
-					execute_command(*commands, stderr, format, ERROR_MESSAGE);
+					execute_command(*commands);
 				free(parsed_input_parall);
 				break;
 			default:
 				parsed_input = parse_input(strsep(&input, END_OF_LINE), TEXT_SEPARATOR);
-				execute_command(parsed_input, stderr, format, ERROR_MESSAGE);
+				execute_command(parsed_input);
 				free(parsed_input);
 		}
 	}
@@ -78,7 +83,7 @@ void bash_mode(char* file_name){
 	FILE *file;
 	file = fopen(file_name, "r");
 	if(file == NULL){
-        fprintf( stderr,"%s", ERROR_MESSAGE);
+        write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
         exit(1);
     }
 	char *line = NULL;
@@ -135,16 +140,16 @@ char *get_path(char *command){
 }
 //
 
-void execute_command(char **args, FILE *file, char *format, char *message){
+void execute_command(char **args){
 	char* exit_custom = "exit";
 	char* cd_custom = "cd";
 	char* path_custom = "path";
 	if(strcmp(args[0], exit_custom) == 0){
 		if(args[1] == NULL) exit(0);
-		else fprintf(file, format, message);		
+		else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));	
 	}else if(strcmp(args[0], cd_custom) == 0){
 		if (args[1] != NULL && args[2] == NULL) cd(args[1]);
-		else fprintf(file, format, message);
+		else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 	}else if(strcmp(args[0], path_custom) == 0){
 		path(args);
 	}else{
@@ -153,17 +158,17 @@ void execute_command(char **args, FILE *file, char *format, char *message){
 			int rc = fork();
 			 if (rc < 0) {
 				 // fork failed; exit
-				 fprintf(file, format, message);
+				 write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 				 exit(1);
 			}else if (rc == 0) {
 				// child (new process)
 				 if(execv(path_name, args) == -1) {
-					 fprintf(file, format, message);
+					 write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 					 exit(1);
 				 }				 
 			}else{
 				wait(NULL); // hasta que no se ejecute el hijo no salimos
 			}
-		}else fprintf(file, format, message);
+		}else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 	}
 }
