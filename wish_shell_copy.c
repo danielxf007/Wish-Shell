@@ -13,7 +13,7 @@ int get_input_type(char *input);
 void cd(char* path_name);
 void path(char **args);
 char* get_path(char* command);
-void execute_command(char** args);
+void execute_command(char **args, FILE *file, char *format, char *message);
 void execute_command_redir(char **args, char *file_name);
 int main(int argc, char** argv){
 	
@@ -39,6 +39,7 @@ void inter_mode(){
 	char ***parsed_input_redir;
 	char ***parsed_input_parall;
 	char **parsed_input;
+	char *format = "%s";
 
 	while(!finished){
 		input = NULL;
@@ -49,7 +50,7 @@ void inter_mode(){
 		switch(input_type){
 			case 1:
 				parsed_input_redir = parse_input_redir(strsep(&input, END_OF_LINE));
-				execute_command_redir(parsed_input_redir[0], parsed_input_redir[1][0]);
+				//execute_command_redir(parsed_input_redir[0], parsed_input_redir[1][0]);
 				free(parsed_input_redir);
 				break;
 			case 2:
@@ -58,7 +59,7 @@ void inter_mode(){
 				break;
 			default:
 				parsed_input = parse_input(strsep(&input, END_OF_LINE), TEXT_SEPARATOR);
-				execute_command(parsed_input);
+				execute_command(parsed_input, stderr, format, ERROR_MESSAGE);
 				free(parsed_input);
 		}
 	}
@@ -125,16 +126,16 @@ char *get_path(char *command){
 }
 //
 
-void execute_command(char** args){
+void execute_command(char **args, FILE *file, char *format, char *message){
 	char* exit_custom = "exit";
 	char* cd_custom = "cd";
 	char* path_custom = "path";
 	if(strcmp(args[0], exit_custom) == 0){
 		if(args[1] == NULL) exit(0);
-		else fprintf( stderr,"%s", ERROR_MESSAGE);		
+		else fprintf(file, format, message);		
 	}else if(strcmp(args[0], cd_custom) == 0){
 		if (args[1] != NULL && args[2] == NULL) cd(args[1]);
-		else fprintf( stderr,"%s", ERROR_MESSAGE);
+		else fprintf(file, format, message);
 	}else if(strcmp(args[0], path_custom) == 0){
 		path(args);
 	}else{
@@ -143,18 +144,18 @@ void execute_command(char** args){
 			int rc = fork();
 			 if (rc < 0) {
 				 // fork failed; exit
-				 fprintf(stderr, "fork failed\n");
+				 fprintf(file, format, message);
 				 exit(1);
 			}else if (rc == 0) {
 				// child (new process)
 				 if(execv(path_name, args) == -1) {
-					 fprintf( stderr,"%s", ERROR_MESSAGE);
+					 fprintf(file, format, message);
 					 exit(1);
 				 }					 
 			}else{
 				wait(NULL); // hasta que no se ejecute el hijo no salimos
 			}
-		}else fprintf( stderr,"%s", ERROR_MESSAGE);
+		}else fprintf(file, format, message);
 	}
 }
 //
