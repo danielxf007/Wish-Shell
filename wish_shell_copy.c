@@ -50,11 +50,20 @@ void inter_mode(){
 		switch(input_type){
 			case 1:
 				parsed_input_redir = parse_input_redir(strsep(&input, END_OF_LINE));
-				//execute_command_redir(parsed_input_redir[0], parsed_input_redir[1][0]);
+				FILE *file;
+				file = freopen(parsed_input_redir[1][0], "w", stdout);
+				if(file == NULL){
+					fprintf(stderr,"%s", ERROR_MESSAGE);
+					exit(1);
+				}
+				execute_command(parsed_input_redir[0], file, format, ERROR_MESSAGE);
+				fclose(file);
 				free(parsed_input_redir);
 				break;
 			case 2:
 				parsed_input_parall = parse_input_parall(strsep(&input, END_OF_LINE));
+				for(char ***commands = parsed_input_parall; *commands;  commands++)
+					execute_command(*commands, stderr, format, ERROR_MESSAGE);
 				free(parsed_input_parall);
 				break;
 			default:
@@ -151,47 +160,10 @@ void execute_command(char **args, FILE *file, char *format, char *message){
 				 if(execv(path_name, args) == -1) {
 					 fprintf(file, format, message);
 					 exit(1);
-				 }					 
+				 }				 
 			}else{
 				wait(NULL); // hasta que no se ejecute el hijo no salimos
 			}
 		}else fprintf(file, format, message);
-	}
-}
-//
-void execute_command_redir(char **args, char *file_name){
-	char* exit_custom = "exit";
-	char* cd_custom = "cd";
-	char* path_custom = "path";
-	if(strcmp(args[0], exit_custom) == 0){
-		if(args[1] == NULL) exit(0);
-		else fprintf( stderr,"%s", ERROR_MESSAGE);		
-	}else if(strcmp(args[0], cd_custom) == 0){
-		if (args[1] != NULL && args[2] == NULL) cd(args[1]);
-		else fprintf( stderr,"%s", ERROR_MESSAGE);
-	}else if(strcmp(args[0], path_custom) == 0){
-		path(args);
-	}else{
-		char *path_name = get_path(args[0]);
-		if(path_name != NULL){
-			int rc = fork();
-			 if (rc < 0) {
-				 // fork failed; exit
-				 fprintf(stderr, "fork failed\n");
-				 exit(1);
-			}else if (rc == 0) {
-				FILE *file;
-				file = freopen(file_name, "w", stdout);
-				if(file == NULL){
-					printf("wcat: cannot open file\n");
-				}else if(execv(path_name, args) == -1) {
-						fprintf(file,"%s", ERROR_MESSAGE);
-						exit(1);
-					}
-				fclose(file);
-			}else{
-				wait(NULL); // hasta que no se ejecute el hijo no salimos
-			}
-		}else fprintf( stderr,"%s", ERROR_MESSAGE);
 	}
 }
