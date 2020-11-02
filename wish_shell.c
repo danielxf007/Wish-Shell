@@ -18,6 +18,7 @@ int get_n_commands(char ***parsed_input_parall);
 void execute_command(char **args);
 void execute_command_redir(char **args, char *file_name);
 void execute_commands(int input_type, char *input);
+void print_2_d_arr(char **arr);
 
 int main(int argc, char** argv){
 	
@@ -40,14 +41,13 @@ void inter_mode(){
 	char *input;
 	size_t len;
 	ssize_t n_ch_read;
-
-
+	int input_type;
 	while(!finished){
 		input = NULL;
 		len = 0;
 		printf("wish> ");
 		n_ch_read = getline(&input, &len, stdin);
-		int input_type = get_input_type(input);
+		input_type = get_input_type(input);
 		execute_commands(input_type, input);
 	}
 }
@@ -59,11 +59,17 @@ void bash_mode(char* file_name){
         write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
         exit(1);
     }
-	char *line = NULL;
+	char *input = NULL;
 	size_t len = 0;
 	ssize_t n_ch_read;
-	while ((n_ch_read = getline(&line, &len, file)) != -1){
+	int input_type;
+	pid_t pid;
+	while ((n_ch_read = getline(&input, &len, file)) != -1){
+		input_type = get_input_type(input);
+		execute_commands(input_type, input);
+		sleep(1);
 	}
+	fclose(file);
 	exit(0);
 }
 
@@ -83,6 +89,7 @@ void cd(char* path_name){
 }
 
 void path(char **args){
+	if (search_path != NULL) free(search_path);
 	search_path = (char**)malloc(sizeof(char*));
 	int index = 0;
 	char **p = args;
@@ -139,6 +146,7 @@ void execute_command(char **args){
 	}else{
 		char *path_name = get_path(args[0]);
 		if(path_name != NULL){
+			/*
 			int rc = fork();
 			 if (rc < 0) {
 				 // fork failed; exit
@@ -147,17 +155,29 @@ void execute_command(char **args){
 			}else if (rc == 0) {
 				// child (new process)
 				 if(execv(path_name, args) == -1) {
+					 printf("%s", "here");
 					 write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 					 exit(1);
 				 }				 
 			}else{
 				wait(NULL); // hasta que no se ejecute el hijo no salimos
 			}
-		}else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
+			*/
+		}//else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 	}
 }
 //
+void print_2_d_arr(char **arr){
+	if(arr != NULL){
+		for(char **p = arr; *p; p++){
+			printf("%s \n", *p);
+	}
+	}
+
+}
+//
 void execute_commands(int input_type, char *input){
+	print_2_d_arr(search_path);
 	char ***parsed_input_redir;
 	char ***parsed_input_parall;
 	char **parsed_input;
