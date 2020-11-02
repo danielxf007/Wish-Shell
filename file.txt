@@ -1,2 +1,2 @@
 path /bin/
-cat -la
+cat parsers.c

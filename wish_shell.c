@@ -63,11 +63,9 @@ void bash_mode(char* file_name){
 	size_t len = 0;
 	ssize_t n_ch_read;
 	int input_type;
-	pid_t pid;
 	while ((n_ch_read = getline(&input, &len, file)) != -1){
 		input_type = get_input_type(input);
 		execute_commands(input_type, input);
-		sleep(1);
 	}
 	fclose(file);
 	exit(0);
@@ -91,10 +89,13 @@ void cd(char* path_name){
 void path(char **args){
 	if (search_path != NULL) free(search_path);
 	search_path = (char**)malloc(sizeof(char*));
+	char *path_name = NULL;
 	int index = 0;
 	char **p = args;
-	while(*(p++)){
-		search_path[index] = *p;
+	while(*(++p)){
+		path_name = (char*)malloc(strlen(*p)*sizeof(char));
+		stpcpy(path_name, *p);
+		search_path[index] = path_name;
 		index++;
 		search_path = (char**)realloc(search_path, (index+1)*sizeof(char*));
 	}
@@ -146,7 +147,6 @@ void execute_command(char **args){
 	}else{
 		char *path_name = get_path(args[0]);
 		if(path_name != NULL){
-			/*
 			int rc = fork();
 			 if (rc < 0) {
 				 // fork failed; exit
@@ -162,8 +162,7 @@ void execute_command(char **args){
 			}else{
 				wait(NULL); // hasta que no se ejecute el hijo no salimos
 			}
-			*/
-		}//else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
+		}else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 	}
 }
 //
@@ -177,7 +176,6 @@ void print_2_d_arr(char **arr){
 }
 //
 void execute_commands(int input_type, char *input){
-	print_2_d_arr(search_path);
 	char ***parsed_input_redir;
 	char ***parsed_input_parall;
 	char **parsed_input;
