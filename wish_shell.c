@@ -14,6 +14,7 @@ int get_input_type(char *input);
 void cd(char* path_name);
 void path(char **args);
 char* get_path(char* command);
+int get_n_commands(char ***parsed_input_parall);
 void execute_command(char **args);
 void execute_command_redir(char **args, char *file_name);
 
@@ -67,12 +68,12 @@ void inter_mode(){
 				break;
 			case 2:
 				parsed_input_parall = parse_input_parall(strsep(&input, END_OF_LINE));
-				int n_commands = sizeof(parsed_input_parall)/sizeof(parsed_input_parall[0]);
+				int n_commands = get_n_commands(parsed_input_parall);
 				pid_t *pids = (pid_t*) malloc(n_commands*sizeof(pid_t));
 				int index;
-				for(char ***commands = parsed_input_parall,  index= 0; *commands;  commands++, index++){
+				for(int index= 0; index < n_commands; index++){
 					if((pids[index]= fork()) == 0){
-						execute_command(*commands);
+						execute_command(parsed_input_parall[index]);
 						exit(0);
 					}
 				}
@@ -147,6 +148,17 @@ char *get_path(char *command){
 		}
 	}
 	return path_name;
+}
+
+//
+int get_n_commands(char ***parsed_input_parall){
+	int n_commands = 0;
+	char ***commands = parsed_input_parall;
+	while(*commands){
+		n_commands++;
+		commands++;
+	}
+	return n_commands;
 }
 //
 
