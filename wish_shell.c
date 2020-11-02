@@ -67,8 +67,18 @@ void inter_mode(){
 				break;
 			case 2:
 				parsed_input_parall = parse_input_parall(strsep(&input, END_OF_LINE));
-				for(char ***commands = parsed_input_parall; *commands;  commands++)
-					execute_command(*commands);
+				int n_commands = sizeof(parsed_input_parall)/sizeof(parsed_input_parall[0]);
+				pid_t *pids = (pid_t*) malloc(n_commands*sizeof(pid_t));
+				int index;
+				for(char ***commands = parsed_input_parall,  index= 0; *commands;  commands++, index++){
+					if((pids[index]= fork()) == 0){
+						execute_command(*commands);
+						exit(0);
+					}
+				}
+				while(n_commands--)
+					wait(NULL);
+				free(pids);
 				free(parsed_input_parall);
 				break;
 			default:
