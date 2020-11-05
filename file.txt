@@ -1,2 +1,0 @@
-path /bin/
-cat parsers.c

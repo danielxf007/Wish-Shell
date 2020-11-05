@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <regex.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include<string.h>
@@ -6,22 +7,50 @@
 #include "parsers.h"
 #include <fcntl.h>
 #define ERROR_MESSAGE "An error has occurred\n"
-#define END_OF_LINE "\n"
-char **search_path = NULL;
+char **search_path;
 void inter_mode();
 void bash_mode(char* file_name);
-int get_input_type(char *input);
+int get_input_type(char ***input);
 void cd(char* path_name);
 void path(char **args);
 char* get_path(char* command);
 int get_n_commands(char ***parsed_input_parall);
+char **copy_command(int start, int end, char **command);
 void execute_command(char **args);
-void execute_command_redir(char **args, char *file_name);
-void execute_commands(int input_type, char *input);
-void print_2_d_arr(char **arr);
+void execute_command_redir(char **expr, int index);
+void execute_commands(int input_type, char ***parsed_expr);
+
+int get_index(char *str, char c){
+	int index = -1;
+	if(str){
+		for(char *p = str; *p; p++){
+			if(*p == c){
+				index = p-str;
+				break;
+			}
+		}
+	}
+	return index;
+}
+
+int get_index_2d(char **arr, char *element){
+	int index = -1;
+	if(arr){
+		for(char **p = arr; *p; p++){
+			if(!strcmp(*p, element)){
+				index = p-arr;
+				break;
+			}
+		}
+	}
+	return index;
+}
 
 int main(int argc, char** argv){
-	
+	char *bin = "/bin";
+	search_path = (char**)malloc(2*sizeof(char*));
+	search_path[0] = bin;
+	search_path[1] = NULL;
 	switch(argc-1){
 		case 0:
 			inter_mode();
@@ -30,25 +59,29 @@ int main(int argc, char** argv){
 			bash_mode(argv[1]);
 			break;
 		default:
-			fprintf( stderr,"%s", ERROR_MESSAGE);
+			write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 			exit(1);
 	}
 	return 0;
 }
-//Sheel modes
+
 void inter_mode(){
-	int finished = 0;
 	char *input;
+	char *command_input;
+	char ***parsed_expr;
 	size_t len;
-	ssize_t n_ch_read;
 	int input_type;
-	while(!finished){
+	int char_index;
+	while(1){
 		input = NULL;
 		len = 0;
 		printf("wish> ");
-		n_ch_read = getline(&input, &len, stdin);
-		input_type = get_input_type(input);
-		execute_commands(input_type, input);
+		getline(&input, &len, stdin);
+		char_index = get_index(input, END_LINE);
+		command_input = sub_str(0, char_index, input);
+		parsed_expr = parse_in(command_input);
+		input_type = get_input_type(parsed_expr);
+		execute_commands(input_type, parsed_expr);
 	}
 }
 
@@ -60,30 +93,37 @@ void bash_mode(char* file_name){
         exit(1);
     }
 	char *input = NULL;
+	char *command_input;
+	char ***parsed_expr;
+	int char_index;
 	size_t len = 0;
-	ssize_t n_ch_read;
 	int input_type;
-	while ((n_ch_read = getline(&input, &len, file)) != -1){
-		input_type = get_input_type(input);
-		execute_commands(input_type, input);
+	while (getline(&input, &len, file) != -1){
+		char_index = get_index(input, END_LINE);
+		command_input = sub_str(0, char_index, input);
+		parsed_expr = parse_in(command_input);
+		input_type = get_input_type(parsed_expr);
+		execute_commands(input_type, parsed_expr);
 	}
 	fclose(file);
 	exit(0);
 }
 
-// Returns the type of input, 0 for Redirection, 1 for Parallel, 2 for normal
-
-int get_input_type(char *input){
-	int input_type = 0;
-	if(strstr(input, TEXT_SEPARATOR_REDIRR)) input_type = 1;
-	else if(strstr(input, TEXT_SEPARATOR_PARALLEL)) input_type = 2;
+int get_input_type(char ***input){
+	int input_type = 4;
+	if(input == NULL)
+		input_type = 0;
+	else if(input[0][0] == NULL)
+		input_type = 1;
+	else if(input[1] != NULL)
+		input_type = 2;
+	else if(get_index_2d(input[0], ">\0") != -1)
+		input_type = 3;
 	return input_type;
 }
 
-// Built in Commands
-
 void cd(char* path_name){
-	if(chdir(path_name) == -1) fprintf( stderr,"%s", ERROR_MESSAGE);
+	if(chdir(path_name) == -1) write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 }
 
 void path(char **args){
@@ -102,14 +142,13 @@ void path(char **args){
 	search_path[index] = NULL;
 }
 
-// Return 1 if the command can be executed, 0 otherwise
-
 char *get_path(char *command){
 	char *path_name = NULL;
 	if(!search_path) return path_name;
 	for(char **p = search_path; *p; p++){
-		path_name = (char*)malloc((strlen(*p) + strlen(command))*sizeof(char));
+		path_name = (char*)malloc((strlen(*p) + strlen(command)+1)*sizeof(char));
 		stpcpy(path_name, *p);
+		strcat(path_name, "/");
 		strcat(path_name, command);
 		if(access(path_name, X_OK) == 0) break;
 		else {
@@ -120,7 +159,7 @@ char *get_path(char *command){
 	return path_name;
 }
 
-//
+
 int get_n_commands(char ***parsed_input_parall){
 	int n_commands = 0;
 	char ***commands = parsed_input_parall;
@@ -130,7 +169,15 @@ int get_n_commands(char ***parsed_input_parall){
 	}
 	return n_commands;
 }
-//
+
+char **copy_command(int start, int end, char **command){
+	char **new_command = (char**)malloc((end-start+1)*sizeof(char*));
+	for(int i = start; i < end; i++)
+		new_command[i-start] = command[i];
+	new_command[end-start] = NULL;
+	return new_command;
+	
+}
 
 void execute_command(char **args){
 	char* exit_custom = "exit";
@@ -148,76 +195,67 @@ void execute_command(char **args){
 		char *path_name = get_path(args[0]);
 		if(path_name != NULL){
 			int rc = fork();
-			 if (rc < 0) {
-				 // fork failed; exit
-				 write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
-				 exit(1);
-			}else if (rc == 0) {
-				// child (new process)
+			if (rc == 0) {
 				 if(execv(path_name, args) == -1) {
-					 printf("%s", "here");
 					 write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 					 exit(1);
 				 }				 
-			}else{
-				wait(NULL); // hasta que no se ejecute el hijo no salimos
-			}
+			}else
+				wait(NULL);
 		}else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 	}
 }
-//
-void print_2_d_arr(char **arr){
-	if(arr != NULL){
-		for(char **p = arr; *p; p++){
-			printf("%s \n", *p);
-	}
-	}
 
+void execute_command_redir(char **expr, int index){
+	char **args = copy_command(0, index-1, expr);
+	int fd = open(expr[index-1], O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	int std_out = dup(STDOUT_FILENO);
+	int std_err = dup(STDERR_FILENO);
+	dup2(fd, STDOUT_FILENO);
+	dup2(fd, STDERR_FILENO);
+	execute_command(args);
+	close(fd);
+	dup2(std_out, STDOUT_FILENO);
+	dup2(std_err, STDERR_FILENO);			
 }
-//
-void execute_commands(int input_type, char *input){
-	char ***parsed_input_redir;
-	char ***parsed_input_parall;
-	char **parsed_input;
+
+void execute_command_parall(char ***expr){
+	int n_commands = get_n_commands(expr);
+	int index_c;
+	pid_t *pids = (pid_t*) malloc(n_commands*sizeof(pid_t));
+	int index;
+	for(index= 0; index < n_commands; index++){
+		if((pids[index]= fork()) == 0){
+			if(expr[index][0] == NULL)
+				exit(0);
+			index_c = get_index_2d(expr[index], ">\0");
+			if(index_c != -1)
+				execute_command_redir(expr[index], index_c);
+			else
+				execute_command(expr[index]);
+			exit(0);
+		}
+	}
+	while(n_commands--)
+		wait(NULL);
+}
+
+void execute_commands(int input_type, char ***parsed_expr){
+	int index;
 	switch(input_type){
+		case 0:
+			write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
+			break;
 		case 1:
-			parsed_input_redir = parse_input_redir(strsep(&input, END_OF_LINE));
-			if(parsed_input_redir){
-				int fd = open(parsed_input_redir[1][0], O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-				int std_out = dup(STDOUT_FILENO);
-				int std_err = dup(STDERR_FILENO);
-				dup2(fd, STDOUT_FILENO);
-				dup2(fd, STDERR_FILENO);
-				execute_command(parsed_input_redir[0]);
-				close(fd);
-				dup2(std_out, STDOUT_FILENO);
-				dup2(std_err, STDERR_FILENO);
-				free(parsed_input_redir);					
-			}else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
 			break;
 		case 2:
-			parsed_input_parall = parse_input_parall(strsep(&input, END_OF_LINE));
-			if(parsed_input_parall){
-				int n_commands = get_n_commands(parsed_input_parall);
-				pid_t *pids = (pid_t*) malloc(n_commands*sizeof(pid_t));
-				int index;
-				for(int index= 0; index < n_commands; index++){
-					if((pids[index]= fork()) == 0){
-						execute_command(parsed_input_parall[index]);
-						exit(0);
-					}
-				}
-				while(n_commands--)
-					wait(NULL);
-				free(pids);
-				free(parsed_input_parall);
-			}else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
+			execute_command_parall(parsed_expr);
+			break;
+		case 3:
+			index = get_index_2d(parsed_expr[0], ">\0");
+			execute_command_redir(parsed_expr[0], index);
 			break;
 		default:
-			parsed_input = parse_input(strsep(&input, END_OF_LINE), TEXT_SEPARATOR);
-			if(parsed_input){
-				execute_command(parsed_input);
-				free(parsed_input);
-			}else write(STDERR_FILENO, ERROR_MESSAGE, strlen(ERROR_MESSAGE)*sizeof(char));
-	}	
+			execute_command(parsed_expr[0]);
+	}
 }
